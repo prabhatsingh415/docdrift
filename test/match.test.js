@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { compare, normalizePath } from '../src/match.js';
-import { check } from '../src/check.js';
+import { check, formatEndpointList } from '../src/check.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -128,9 +128,46 @@ test('check reports drift for the fixtures-check project', () => {
   assert.equal(exitCode, 1);
   assert.match(report, /^docdrift check: 3 code endpoints, 3 documented endpoints, 2 matched$/m);
   assert.match(report, /^STALE \(documented, not in code\)$/m);
-  assert.match(report, /GET \/api\/legacy \(.*README\.md:7\)/);
+  assert.match(report, /^ {2}GET {4}\/api\/legacy \(README\.md:7\)$/m);
   assert.match(report, /^UNDOCUMENTED \(in code, not documented\)$/m);
-  assert.match(report, /DELETE \/api\/users\/\{id\} \(.*UserController\.java:15\)/);
+  assert.match(
+    report,
+    /^ {2}DELETE \/api\/users\/\{id\} \(UserController\.java:15\)$/m,
+  );
+});
+
+test('check output uses relative paths, aligned methods and sorted paths', () => {
+  const baseDir = join(here, 'fixtures-check');
+  const listed = formatEndpointList(
+    [
+      {
+        method: 'GET',
+        path: '/zeta',
+        file: join(baseDir, 'controller', 'Zeta.java'),
+        line: 9,
+      },
+      {
+        method: 'POST',
+        path: '/alpha',
+        file: join(baseDir, 'controller', 'alpha', 'Alpha.java'),
+        line: 5,
+      },
+      {
+        method: 'GET',
+        path: '/alpha',
+        file: join(baseDir, 'controller', 'alpha', 'Alpha.java'),
+        line: 3,
+      },
+    ],
+    baseDir,
+    6,
+  );
+
+  assert.deepEqual(listed, [
+    '  GET    /alpha (controller/alpha/Alpha.java:3)',
+    '  POST   /alpha (controller/alpha/Alpha.java:5)',
+    '  GET    /zeta (controller/Zeta.java:9)',
+  ]);
 });
 
 test('check reports no drift when every endpoint matches', () => {

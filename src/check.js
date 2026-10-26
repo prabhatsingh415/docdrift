@@ -1,3 +1,5 @@
+import { relative, sep } from 'node:path';
+
 import { scanJava } from './scan.js';
 import { scanDocs } from './docs.js';
 import { compare } from './match.js';
@@ -34,19 +36,21 @@ export function check(codeDir, docsDir = codeDir) {
   if (drift === 0) {
     lines.push('No drift found.');
   } else {
+    const methodWidth = Math.max(
+      0,
+      ...result.stale.map((endpoint) => endpoint.method.length),
+      ...result.undocumented.map((endpoint) => endpoint.method.length),
+    );
+
     if (result.stale.length > 0) {
       lines.push('STALE (documented, not in code)');
-      for (const endpoint of result.stale) {
-        lines.push(`  ${endpoint.method} ${endpoint.path} (${endpoint.file}:${endpoint.line})`);
-      }
+      lines.push(...formatEndpointList(result.stale, docsDir, methodWidth));
       lines.push('');
     }
 
     if (result.undocumented.length > 0) {
       lines.push('UNDOCUMENTED (in code, not documented)');
-      for (const endpoint of result.undocumented) {
-        lines.push(`  ${endpoint.method} ${endpoint.path} (${endpoint.file}:${endpoint.line})`);
-      }
+      lines.push(...formatEndpointList(result.undocumented, codeDir, methodWidth));
       lines.push('');
     }
   }
@@ -58,4 +62,30 @@ export function check(codeDir, docsDir = codeDir) {
     report: lines.join('\n').trimEnd(),
     exitCode: drift === 0 ? 0 : 1,
   };
+}
+
+/**
+ * Format endpoints as "METHOD PATH (relative/file.java:line)", sorted by path
+ * and then method, with the method column padded to align the paths.
+ */
+export function formatEndpointList(endpoints, baseDir, methodWidth = 0) {
+  return [...endpoints]
+    .sort(
+      (a, b) =>
+        compareText(a.path, b.path) || compareText(a.method, b.method),
+    )
+    .map(
+      (endpoint) =>
+        `  ${endpoint.method.padEnd(methodWidth)} ${endpoint.path} (${relativeFile(baseDir, endpoint.file)}:${endpoint.line})`,
+    );
+}
+
+function relativeFile(baseDir, file) {
+  return relative(baseDir, file).split(sep).join('/');
+}
+
+function compareText(a, b) {
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
 }

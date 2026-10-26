@@ -1,1 +1,3 @@
-node_modulesout.json
+node_modules
+out.json
+.env

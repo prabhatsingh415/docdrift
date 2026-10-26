@@ -19,14 +19,37 @@ export function scanDocs(dir) {
 
   for (const file of collectMarkdownFiles(dir)) {
     const text = readFileSync(file, 'utf8');
-    for (const endpoint of scanText(text)) {
+    for (const endpoint of extractFromText(text)) {
       endpoints.push({ ...endpoint, file });
     }
   }
 
   return endpoints.sort(
-    (a, b) => compare(a.file, b.file) || a.line - b.line || a.index - b.index,
+    (a, b) => compare(a.file, b.file) || a.line - b.line,
   ).map(({ method, path, file, line }) => ({ method, path, file, line }));
+}
+
+/**
+ * Extract documented endpoints from a Markdown string.
+ *
+ * @param {string} text Markdown content
+ * @returns {{ method: string, path: string, line: number }[]}
+ */
+export function extractFromText(text) {
+  const found = [];
+
+  ENDPOINT_RE.lastIndex = 0;
+  let match;
+  while ((match = ENDPOINT_RE.exec(String(text ?? ''))) !== null) {
+    const method = match[1];
+    let path = match[0].slice(method.length).replace(/^[ \t`|*]+/, '');
+    path = path.split('?')[0].replace(/[.:]+$/, '');
+    if (!path.startsWith('/')) continue;
+
+    found.push({ method, path, line: lineOf(text, match.index) });
+  }
+
+  return found;
 }
 
 function collectMarkdownFiles(dir) {
@@ -59,28 +82,6 @@ function walkMarkdown(current, files) {
       files.push(full);
     }
   }
-}
-
-function scanText(text) {
-  const found = [];
-
-  ENDPOINT_RE.lastIndex = 0;
-  let match;
-  while ((match = ENDPOINT_RE.exec(text)) !== null) {
-    const method = match[1];
-    let path = match[0].slice(method.length).replace(/^[ \t`|*]+/, '');
-    path = path.split('?')[0].replace(/[.:]+$/, '');
-    if (!path.startsWith('/')) continue;
-
-    found.push({
-      method,
-      path,
-      line: lineOf(text, match.index),
-      index: match.index,
-    });
-  }
-
-  return found;
 }
 
 function compare(a, b) {
