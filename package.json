@@ -1,0 +1,16 @@
+{
+  "name": "docdrift",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Detect Spring Boot endpoints that drift from the docs",
+  "type": "module",
+  "bin": {
+    "docdrift": "bin/docdrift.js"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
