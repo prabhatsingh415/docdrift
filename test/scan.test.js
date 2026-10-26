@@ -65,3 +65,12 @@ test('line numbers point at the annotation in the original file', () => {
     );
   }
 });
+
+test('constant paths are skipped while literal paths still join cleanly', () => {
+  const endpoints = endpointsIn('Const.java');
+  const paths = methodAndPath(endpoints);
+
+  assert.ok(paths.some(([method, path]) => method === 'GET' && path === '/api/users'));
+  assert.ok(endpoints.every((endpoint) => endpoint.path !== '/api/Constants.ORDERS'));
+  assert.equal(endpoints.length, 1);
+});
