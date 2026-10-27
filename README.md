@@ -144,7 +144,7 @@ No drift found
 
 ## Configuring `fix`
 
-`fix` works with any OpenAI-compatible endpoint; bring your own key. Set these variables as environment variables or in a `.env` file:
+`fix` works with any model that can write a README draft, as long as the provider offers an OpenAI-style chat API (OpenRouter, Ollama, or others). Open-weight or hosted, the choice is yours; bring your own key. Set these variables as environment variables or in a `.env` file:
 
 - `DOCDRIFT_API_KEY`
 - `DOCDRIFT_BASE_URL`
@@ -154,9 +154,9 @@ Never commit `.env` (a `.env.example` is included). The key is optional for loca
 
 `fix --dry-run` prints the prompt without calling any model. `check`, `scan` and `docs` need no key and no AI.
 
-Demoed with open-weight models through OpenRouter (for example `recursive/flint-v1.0:free`). Any OpenAI-compatible endpoint works.
+Demoed with open-weight models through OpenRouter (for example `recursive/flint-v1.0:free`).
 
-Speed of `fix` depends on the model and provider you choose and on your account's rate limits. Free-tier models can be slow or return HTTP 429 (rate-limited); DocDrift does not retry automatically, so try again or set another model in DOCDRIFT_MODEL.
+Speed of `fix` depends on the model and provider you choose and on your account's rate limits. Free-tier models can be slow or return HTTP 429 (rate-limited); DocDrift does not retry automatically, so try again or set another model in `DOCDRIFT_MODEL`.
 
 ## How it works
 
