@@ -8,9 +8,14 @@ const here = dirname(fileURLToPath(import.meta.url));
 const bin = join(here, '..', 'bin', 'docdrift.js');
 
 function run(args, cwd) {
+  const env = { ...process.env };
+  delete env.FORCE_COLOR;
+  env.NO_COLOR = '1';
+
   return spawnSync(process.execPath, [bin, ...args], {
     cwd,
     encoding: 'utf8',
+    env,
   });
 }
 
