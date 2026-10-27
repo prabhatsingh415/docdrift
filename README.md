@@ -12,8 +12,10 @@ AI is used only to draft the fix, and a code-based verifier checks that draft be
 
 ```bash
 cd my-spring-app
-npx github:prabhatsingh415/docdrift check
+npx @prabhat-singh/docdrift check
 ```
+
+Or install it in your project with `npm i @prabhat-singh/docdrift` and run `npx docdrift check`.
 
 That scans every `.java` file under the current folder and compares it with `README.md` and `docs/*.md` in that folder.
 
@@ -34,13 +36,20 @@ AI is optional and only used to draft a README fix. A code-based verifier checks
 
 ## Install
 
-For a one-off run without installing:
+Project install:
+
+```bash
+npm i @prabhat-singh/docdrift
+npx docdrift check
+```
+
+One-off run:
 
 ```bash
 npx @prabhat-singh/docdrift check .
 ```
 
-For a global install:
+Global install:
 
 ```bash
 npm install -g @prabhat-singh/docdrift
@@ -116,11 +125,21 @@ UNDOCUMENTED (in code, not documented)
 
 ### Example run on a demo project
 
+First, `docdrift fix` drafts a corrected README:
+
 ```text
 Status: VERIFIED
-Model: recursive/flint-v1.0:free
+Model: nvidia/nemotron-3.5-super-vl:free
 Attempts: 1
 Stale removed: 2 | Undocumented added: 9
+```
+
+After replacing README.md with the draft, `docdrift check` again:
+
+```text
+docdrift check: 25 code endpoints, 25 documented endpoints, 25 matched
+
+No drift found
 ```
 
 ## Configuring `fix`
@@ -135,7 +154,9 @@ Never commit `.env` (a `.env.example` is included). The key is optional for loca
 
 `fix --dry-run` prints the prompt without calling any model. `check`, `scan` and `docs` need no key and no AI.
 
-This project was demoed with the open-weight model `recursive/flint-v1.0:free` through OpenRouter.
+Demoed with open-weight models through OpenRouter (for example `recursive/flint-v1.0:free`). Any OpenAI-compatible endpoint works.
+
+Speed of `fix` depends on the model and provider you choose and on your account's rate limits. Free-tier models can be slow or return HTTP 429 (rate-limited); DocDrift does not retry automatically, so try again or set another model in DOCDRIFT_MODEL.
 
 ## How it works
 
