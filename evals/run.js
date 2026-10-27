@@ -80,17 +80,13 @@ export function runEval(dirs) {
 
 function runTrial({ repo, format, trial, endpoints, rng }) {
   const k = Math.min(1 + (trial % 3), Math.floor(endpoints.length / 2));
-  const shuffled = shuffle([...endpoints], rng);
-  const removed = shuffled.slice(0, k);
-  const kept = shuffled.slice(k);
-
-  const fakes = [];
-  for (let i = 0; i < k; i += 1) {
-    fakes.push({
-      method: METHODS[Math.floor(rng() * METHODS.length)],
-      path: `/fake-${trial + 1}-${i + 1}/items`,
-    });
-  }
+  const { kept, removed, fakes } = seedDrift({
+    endpoints,
+    rng,
+    trial,
+    removedCount: k,
+    fakeCount: k,
+  });
 
   const documented = kept.map((endpoint) => ({
     method: primaryDocMethod(endpoint.method),
@@ -142,7 +138,29 @@ function runTrial({ repo, format, trial, endpoints, rng }) {
   }
 }
 
-function renderReadme(format, endpoints) {
+export function seedDrift({
+  endpoints,
+  rng,
+  trial,
+  removedCount,
+  fakeCount,
+}) {
+  const shuffled = shuffle([...endpoints], rng);
+  const removed = shuffled.slice(0, removedCount);
+  const kept = shuffled.slice(removedCount);
+  const fakes = [];
+
+  for (let i = 0; i < fakeCount; i += 1) {
+    fakes.push({
+      method: METHODS[Math.floor(rng() * METHODS.length)],
+      path: `/fake-${trial + 1}-${i + 1}/items`,
+    });
+  }
+
+  return { kept, removed, fakes };
+}
+
+export function renderReadme(format, endpoints) {
   const bullet = (endpoint) => `- \`${endpoint.method} ${endpoint.path}\``;
   const row = (endpoint) => `| ${endpoint.method} | \`${endpoint.path}\` |`;
 
@@ -185,7 +203,7 @@ function renderReadme(format, endpoints) {
   ].join('\n');
 }
 
-function repoName(dir) {
+export function repoName(dir) {
   const parts = resolve(dir)
     .split(/[\\/]+/)
     .filter(Boolean);
@@ -197,7 +215,7 @@ function repoName(dir) {
   return basename(resolve(dir));
 }
 
-function primaryDocMethod(method) {
+export function primaryDocMethod(method) {
   const methods = String(method ?? '')
     .split('|')
     .map((value) => value.trim());
@@ -325,7 +343,7 @@ function markdownTable(rows, total) {
   return [header, separator, ...body].join('\n');
 }
 
-function scanJavaQuiet(dir) {
+export function scanJavaQuiet(dir) {
   const original = process.stderr.write;
   process.stderr.write = () => true;
   try {
@@ -343,7 +361,7 @@ function shuffle(items, rng) {
   return items;
 }
 
-function mulberry32(seed) {
+export function mulberry32(seed) {
   let state = seed >>> 0;
   return function next() {
     state = (state + 0x6d2b79f5) >>> 0;

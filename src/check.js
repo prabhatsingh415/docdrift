@@ -2,7 +2,17 @@ import { relative, sep } from 'node:path';
 
 import { scanJava } from './scan.js';
 import { scanDocs } from './docs.js';
-import { compare } from './match.js';
+import { compare, normalizePath } from './match.js';
+
+const FRAMEWORK_PREFIXES = [
+  '/actuator',
+  '/swagger-ui',
+  '/v3/api-docs',
+  '/v2/api-docs',
+  '/swagger-resources',
+  '/h2-console',
+  '/error',
+];
 
 /**
  * Run the whole drift check for a project directory.
@@ -10,9 +20,10 @@ import { compare } from './match.js';
  * @param {string} codeDir directory with .java sources
  * @param {string} [docsDir] directory with README.md/docs, defaults to codeDir
  * @param {object | null} [style] optional createStyle() result for colored output
+ * @param {{ strict?: boolean }} [options] strict reports framework endpoints as stale
  * @returns {{ report: string, exitCode: number, code: object[], docs: object[], result: object }}
  */
-export function check(codeDir, docsDir = codeDir, style = null) {
+export function check(codeDir, docsDir = codeDir, style = null, options = {}) {
   const code = scanJava(codeDir);
   const docs = scanDocs(docsDir);
 
@@ -28,35 +39,49 @@ export function check(codeDir, docsDir = codeDir, style = null) {
   }
 
   const result = compare(code, docs);
-  const drift = result.stale.length + result.undocumented.length;
+  const strict = options.strict === true;
+  const stale = strict
+    ? result.stale
+    : result.stale.filter((endpoint) => !isFrameworkPath(endpoint.path));
+  const ignored = strict
+    ? []
+    : result.stale.filter((endpoint) => isFrameworkPath(endpoint.path));
+  const undocumented = result.undocumented;
+  const drift = stale.length + undocumented.length;
+  const documentedCount = new Set(
+    docs.map(
+      (endpoint) => `${endpoint.method} ${normalizePath(endpoint.path)}`,
+    ),
+  ).size;
+  const matchedCount = Math.min(countMatched(code, docs), code.length);
+  const ignoredText = ignored.length > 0 ? frameworkLine(ignored) : null;
   const lines = [];
 
   if (style?.enabled) {
     lines.push(
-      `${style.muted('docdrift check:')} ${style.bold(style.success(String(code.length)))} code endpoints, ${style.bold(style.success(String(docs.length)))} documented endpoints, ${style.bold(style.success(String(result.matched)))} matched`,
+      `${style.muted('docdrift check:')} ${style.bold(style.success(String(code.length)))} code endpoints, ${style.bold(style.success(String(documentedCount)))} documented endpoints, ${style.bold(style.success(String(matchedCount)))} matched`,
     );
+    if (ignoredText) lines.push(ignoredText);
     lines.push('');
 
     if (drift > 0) {
       const methodWidth = Math.max(
         0,
-        ...result.stale.map((endpoint) => endpoint.method.length),
-        ...result.undocumented.map((endpoint) => endpoint.method.length),
+        ...stale.map((endpoint) => endpoint.method.length),
+        ...undocumented.map((endpoint) => endpoint.method.length),
       );
 
-      if (result.stale.length > 0) {
+      if (stale.length > 0) {
         lines.push(style.danger('STALE (documented, not in code)'));
-        lines.push(
-          ...formatEndpointList(result.stale, docsDir, methodWidth, style),
-        );
+        lines.push(...formatEndpointList(stale, docsDir, methodWidth, style));
         lines.push('');
       }
 
-      if (result.undocumented.length > 0) {
+      if (undocumented.length > 0) {
         lines.push(style.danger('UNDOCUMENTED (in code, not documented)'));
         lines.push(
           ...formatEndpointList(
-            result.undocumented,
+            undocumented,
             codeDir,
             methodWidth,
             style,
@@ -70,34 +95,35 @@ export function check(codeDir, docsDir = codeDir, style = null) {
       drift === 0
         ? style.success('✔ No drift found')
         : style.danger(
-            `✖ ${result.stale.length} stale, ${result.undocumented.length} undocumented`,
+            `✖ ${stale.length} stale, ${undocumented.length} undocumented`,
           ),
     );
   } else {
     lines.push(
-      `docdrift check: ${code.length} code endpoints, ${docs.length} documented endpoints, ${result.matched} matched`,
-      '',
+      `docdrift check: ${code.length} code endpoints, ${documentedCount} documented endpoints, ${matchedCount} matched`,
     );
+    if (ignoredText) lines.push(ignoredText);
+    lines.push('');
 
     if (drift === 0) {
       lines.push('No drift found.');
     } else {
       const methodWidth = Math.max(
         0,
-        ...result.stale.map((endpoint) => endpoint.method.length),
-        ...result.undocumented.map((endpoint) => endpoint.method.length),
+        ...stale.map((endpoint) => endpoint.method.length),
+        ...undocumented.map((endpoint) => endpoint.method.length),
       );
 
-      if (result.stale.length > 0) {
+      if (stale.length > 0) {
         lines.push('STALE (documented, not in code)');
-        lines.push(...formatEndpointList(result.stale, docsDir, methodWidth));
+        lines.push(...formatEndpointList(stale, docsDir, methodWidth));
         lines.push('');
       }
 
-      if (result.undocumented.length > 0) {
+      if (undocumented.length > 0) {
         lines.push('UNDOCUMENTED (in code, not documented)');
         lines.push(
-          ...formatEndpointList(result.undocumented, codeDir, methodWidth),
+          ...formatEndpointList(undocumented, codeDir, methodWidth),
         );
         lines.push('');
       }
@@ -111,6 +137,55 @@ export function check(codeDir, docsDir = codeDir, style = null) {
     report: lines.join('\n').trimEnd(),
     exitCode: drift === 0 ? 0 : 1,
   };
+}
+
+// Count each documented (METHOD, normalised path) once, so a duplicate entry
+// does not inflate the header, and never exceed the number of code endpoints.
+function countMatched(codeEndpoints, docEndpoints) {
+  const matchedKeys = new Set();
+
+  for (const docEndpoint of docEndpoints) {
+    if (
+      codeEndpoints.some((codeEndpoint) =>
+        codeCovers(codeEndpoint, docEndpoint),
+      )
+    ) {
+      matchedKeys.add(
+        `${docEndpoint.method} ${normalizePath(docEndpoint.path)}`,
+      );
+    }
+  }
+
+  return matchedKeys.size;
+}
+
+function codeCovers(codeEndpoint, docEndpoint) {
+  if (normalizePath(codeEndpoint.path) !== normalizePath(docEndpoint.path)) {
+    return false;
+  }
+
+  const methods = String(codeEndpoint.method ?? '')
+    .split('|')
+    .map((method) => method.trim());
+
+  return methods.includes('ANY') || methods.includes(docEndpoint.method);
+}
+
+function isFrameworkPath(path) {
+  const normalized = normalizePath(path);
+  return FRAMEWORK_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+}
+
+function frameworkLine(endpoints) {
+  const labels = [...endpoints]
+    .sort(
+      (a, b) =>
+        compareText(normalizePath(a.path), normalizePath(b.path)) ||
+        compareText(a.method, b.method),
+    )
+    .map((endpoint) => `${endpoint.method} ${endpoint.path}`);
+
+  return `Ignored ${endpoints.length} framework endpoint(s) documented but provided by libraries: ${labels.join(', ')}`;
 }
 
 /**

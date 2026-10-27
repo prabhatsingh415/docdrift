@@ -23,10 +23,18 @@ export async function chat(config, messages) {
   });
 
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(
-      `chat request failed with status ${response.status}: ${body.slice(0, 200)}`,
-    );
+    const status = response.status;
+    if ([429, 502, 503, 504].includes(status)) {
+      throw new Error(
+        `The model is rate-limited or busy right now (HTTP ${status}). Try again in a minute, or set another model in DOCDRIFT_MODEL.`,
+      );
+    }
+    if (status === 401 || status === 403) {
+      throw new Error(
+        `The API key was rejected (HTTP ${status}). Check DOCDRIFT_API_KEY.`,
+      );
+    }
+    throw new Error(`The model request failed (HTTP ${status}).`);
   }
 
   const data = await response.json();

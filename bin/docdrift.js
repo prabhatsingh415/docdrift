@@ -32,7 +32,7 @@ if (rawArgs.includes('--help')) {
 } else if (rawArgs.includes('--version')) {
   process.stdout.write(`${fullBanner(style, version)}\n`);
 } else {
-  const flags = new Set(['--dry-run', '--no-color']);
+  const flags = new Set(['--dry-run', '--no-color', '--strict']);
   const [command, target, docsTarget] = rawArgs.filter(
     (arg) => !flags.has(arg),
   );
@@ -66,6 +66,7 @@ if (rawArgs.includes('--help')) {
           target,
           docsTarget ?? target,
           style.enabled ? style : null,
+          { strict: rawArgs.includes('--strict') },
         );
         process.stdout.write(`${report}\n`);
         process.exitCode = exitCode;
@@ -197,6 +198,7 @@ function helpText() {
     '  fix <codeDir> [docsDir]           Draft a verified README fix',
     '',
     'Options:',
+    '  --strict                          Report Spring framework endpoints as STALE',
     '  --dry-run                         Print the writer prompt, no API call',
     '  --no-color                        Disable ANSI colors',
     '',

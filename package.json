@@ -14,7 +14,8 @@
   ],
   "scripts": {
     "test": "node --test",
-    "eval": "node evals/run.js"
+    "eval": "node evals/run.js",
+    "eval:fix": "node evals/fix-eval.js"
   },
   "engines": {
     "node": ">=18"
