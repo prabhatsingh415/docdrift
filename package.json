@@ -1,16 +1,42 @@
 {
-  "name": "docdrift",
+  "name": "@prabhat-singh/docdrift",
   "version": "0.1.0",
-  "private": true,
-  "description": "Detect Spring Boot endpoints that drift from the docs",
+  "description": "Find stale and undocumented REST endpoints by comparing Spring Boot code with your docs. Optional AI-drafted README fixes, verified against the code.",
   "type": "module",
   "bin": {
     "docdrift": "bin/docdrift.js"
   },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "test": "node --test"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "keywords": [
+    "spring-boot",
+    "documentation",
+    "docs",
+    "cli",
+    "rest",
+    "drift",
+    "endpoints"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/prabhatsingh415/docdrift.git"
+  },
+  "homepage": "https://github.com/prabhatsingh415/docdrift#readme",
+  "bugs": {
+    "url": "https://github.com/prabhatsingh415/docdrift/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

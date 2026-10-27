@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import {
   buildWriterMessages,
   fixDocs,
+  formatFixReport,
   writeDriftFile,
 } from '../src/fix.js';
 
@@ -50,7 +51,7 @@ test('a good draft is VERIFIED on the first attempt', async () => {
 
   assert.equal(result.status, 'VERIFIED');
   assert.equal(result.attempts, 1);
-  assert.equal(result.draft, goodDraft);
+  assert.equal(result.draft, goodDraft.trim());
   assert.equal(calls, 1);
   assert.deepEqual(result.invented, []);
   assert.deepEqual(result.missing, []);
@@ -123,6 +124,83 @@ test('no drift returns NO_DRIFT without calling the writer', async () => {
   });
 
   assert.deepEqual(result, { status: 'NO_DRIFT' });
+});
+
+test('a draft wrapped in one markdown fence is cleaned and verified', async () => {
+  const wrapped = `\`\`\`markdown\n${goodDraft}\`\`\``;
+
+  const result = await fixDocs({
+    codeEndpoints: code,
+    docEndpoints: docs,
+    readmeText,
+    chatFn: async () => wrapped,
+  });
+
+  assert.equal(result.status, 'VERIFIED');
+  assert.equal(result.draft, goodDraft.trim());
+  assert.ok(!result.draft.includes('```'));
+});
+
+test('a fence inside the draft body is kept', async () => {
+  const draftWithInnerFence = [
+    '# Users',
+    '',
+    '```http',
+    'GET /users',
+    '```',
+    '',
+    '- GET /users',
+    '- POST /users',
+    '- DELETE /users/{id}',
+  ].join('\n');
+
+  const result = await fixDocs({
+    codeEndpoints: code,
+    docEndpoints: docs,
+    readmeText,
+    chatFn: async () => draftWithInnerFence,
+  });
+
+  assert.equal(result.status, 'VERIFIED');
+  assert.ok(result.draft.includes('```http'));
+  assert.equal(result.draft, draftWithInnerFence);
+});
+
+test('the writer prompt asks to match sections and keep formatting', () => {
+  const messages = buildWriterMessages({
+    codeEndpoints: code,
+    docEndpoints: docs,
+    readmeText,
+  });
+
+  assert.ok(
+    messages[0].content.includes(
+      'Place each added endpoint in the section whose path prefix matches it, and create a new section if none exists. Keep the existing formatting, wording and order of everything else.',
+    ),
+  );
+});
+
+test('the fix report shows status, model and attempts', () => {
+  const report = formatFixReport({
+    status: 'UNVERIFIED',
+    model: 'test-model',
+    attempts: 3,
+    staleRemoved: 1,
+    undocumentedAdded: 0,
+    draftPath: 'README.drift.md',
+    invented: [{ method: 'GET', path: '/ghost' }],
+    missing: [],
+    leftover: [{ method: 'GET', path: '/legacy' }],
+  });
+
+  const lines = report.split('\n');
+  assert.equal(lines[0], 'Status: UNVERIFIED');
+  assert.equal(lines[1], 'Model: test-model');
+  assert.equal(lines[2], 'Attempts: 3');
+  assert.equal(lines[3], 'Stale removed: 1 | Undocumented added: 0');
+  assert.equal(lines[4], 'Draft: README.drift.md');
+  assert.ok(lines.includes('Invented: GET /ghost'));
+  assert.ok(lines.includes('Leftover: GET /legacy'));
 });
 
 test('writer messages contain the README and both endpoint lists', () => {

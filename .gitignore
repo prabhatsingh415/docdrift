@@ -1,3 +1,6 @@
 node_modules
-out.json
 .env
+out.json
+plain.txt
+README.drift.md
+*.tgz

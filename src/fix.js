@@ -19,6 +19,8 @@ export function buildWriterMessages({ codeEndpoints, docEndpoints, readmeText })
     'Mention only endpoints from the lists below, plus endpoints already present in the README that also exist in the code.',
     'Never invent endpoints, paths or HTTP methods.',
     'Remove every STALE endpoint and add every UNDOCUMENTED endpoint.',
+    'Place each added endpoint in the section whose path prefix matches it, and create a new section if none exists.',
+    'Keep the existing formatting, wording and order of everything else.',
   ].join(' ');
 
   const user = [
@@ -79,7 +81,7 @@ export async function fixDocs({
 
   while (attempts <= maxRetries) {
     attempts += 1;
-    draft = String((await chatFn(messages)) ?? '');
+    draft = cleanDraft(await chatFn(messages));
     problems = verifyDraft(draft, codeEndpoints, undocumented, stale);
 
     if (hasNoProblems(problems)) {
@@ -106,6 +108,28 @@ export function writeDriftFile(readmePath, draft) {
   const driftPath = join(dirname(readmePath), 'README.drift.md');
   writeFileSync(driftPath, draft);
   return driftPath;
+}
+
+/**
+ * Trim a draft and drop a single fence wrapping the whole answer. Models often
+ * wrap the README in ```markdown fences; keeping it would write a broken
+ * README and let the fence lines confuse the verifier.
+ */
+function cleanDraft(rawDraft) {
+  const trimmed = String(rawDraft ?? '').trim();
+  const lines = trimmed.split('\n');
+
+  if (
+    lines.length >= 2 &&
+    lines[0].trim().startsWith('```') &&
+    lines[lines.length - 1].trim() === '```'
+  ) {
+    lines.shift();
+    lines.pop();
+    return lines.join('\n').trim();
+  }
+
+  return trimmed;
 }
 
 function verifyDraft(draft, codeEndpoints, undocumented, stale) {
@@ -183,6 +207,82 @@ function problemsMessage({ invented, missing, leftover }) {
 
   lines.push('Return ONLY the corrected full README in Markdown.');
   return lines.join('\n');
+}
+
+/**
+ * Format the `fix` command output. Never includes the API key or base URL.
+ *
+ * @param {{
+ *   status: string, model: string, attempts: number, staleRemoved: number,
+ *   undocumentedAdded: number, draftPath: string | null,
+ *   invented?: object[], missing?: object[], leftover?: object[],
+ * }} input
+ * @param {object | null} [style] optional createStyle() result for colored output
+ * @returns {string}
+ */
+export function formatFixReport(input, style = null) {
+  const {
+    status,
+    model,
+    attempts,
+    staleRemoved,
+    undocumentedAdded,
+    draftPath,
+    invented = [],
+    missing = [],
+    leftover = [],
+  } = input;
+
+  const colored = Boolean(style?.enabled);
+
+  const statusValue = !colored
+    ? status
+    : status === 'UNVERIFIED'
+      ? style.danger(status)
+      : style.success(status);
+
+  const lines = colored
+    ? [
+        `${style.muted('Status:')} ${statusValue}`,
+        `${style.muted('Model:')} ${style.muted(model)}`,
+        `${style.muted('Attempts:')} ${style.muted(attempts)}`,
+        `${style.muted('Stale removed:')} ${style.bold(style.success(String(staleRemoved)))} | ${style.muted('Undocumented added:')} ${style.bold(style.success(String(undocumentedAdded)))}`,
+        `${style.muted('Draft:')} ${style.muted(draftPath ?? '(none)')}`,
+      ]
+    : [
+        `Status: ${status}`,
+        `Model: ${model}`,
+        `Attempts: ${attempts}`,
+        `Stale removed: ${staleRemoved} | Undocumented added: ${undocumentedAdded}`,
+        `Draft: ${draftPath ?? '(none)'}`,
+      ];
+
+  if (status === 'UNVERIFIED') {
+    for (const endpoint of invented) {
+      lines.push(problemLine(style, 'Invented:', endpoint));
+    }
+    for (const endpoint of missing) {
+      lines.push(problemLine(style, 'Missing:', endpoint));
+    }
+    for (const endpoint of leftover) {
+      lines.push(problemLine(style, 'Leftover:', endpoint));
+    }
+  }
+
+  if (colored && status === 'VERIFIED') {
+    lines.push(style.success('✔ Draft verified against the code'));
+  }
+  if (colored && status === 'UNVERIFIED') {
+    lines.push(style.danger('✖ Draft could not be verified'));
+  }
+
+  return lines.join('\n');
+}
+
+function problemLine(style, label, endpoint) {
+  const text = `${endpoint.method} ${endpoint.path}`;
+  if (!style?.enabled) return `${label} ${text}`;
+  return `${style.danger(label)} ${style.danger(text)}`;
 }
 
 function listEndpoints(endpoints) {
