@@ -20,11 +20,13 @@ const FRAMEWORK_PREFIXES = [
  * @param {string} codeDir directory with .java sources
  * @param {string} [docsDir] directory with README.md/docs, defaults to codeDir
  * @param {object | null} [style] optional createStyle() result for colored output
- * @param {{ strict?: boolean }} [options] strict reports framework endpoints as stale
+ * @param {{ strict?: boolean, codeEndpoints?: object[] }} [options] strict reports framework endpoints as stale
  * @returns {{ report: string, exitCode: number, code: object[], docs: object[], result: object }}
  */
 export function check(codeDir, docsDir = codeDir, style = null, options = {}) {
-  const code = scanJava(codeDir);
+  const code = Array.isArray(options.codeEndpoints)
+    ? options.codeEndpoints
+    : scanJava(codeDir);
   const docs = scanDocs(docsDir);
 
   if (docs.length === 0) {

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
 import { scanJava } from '../src/scan.js';
 import { scanDocs, extractFromText } from '../src/docs.js';
@@ -42,45 +42,47 @@ if (rawArgs.includes('--help')) {
     process.stdout.write(`${fullBanner(style, version)}\n\n${helpText()}\n`);
     process.exitCode = 1;
   } else if (command === 'fix') {
-    if (!target) {
-      console.error('usage: docdrift fix <codeDir> [docsDir] [--dry-run]');
-      process.exitCode = 1;
-    } else {
-      process.exitCode = await runFix(
-        target,
-        docsTarget ?? target,
-        rawArgs.includes('--dry-run'),
-        style,
-      );
-    }
+    process.exitCode = await runFix(
+      target ?? '.',
+      docsTarget,
+      rawArgs.includes('--dry-run'),
+      style,
+    );
   } else if (command === 'check') {
-    if (!target) {
-      console.error('usage: docdrift check <codeDir> [docsDir]');
-      process.exitCode = 1;
-    } else {
-      try {
+    const codeDir = target ?? '.';
+    const docsDir = docsTarget ?? codeDir;
+
+    try {
+      const codeEndpoints = scanJava(codeDir);
+      if (codeEndpoints.length === 0) {
+        console.error(noEndpointsMessage(codeDir));
+        process.exitCode = 2;
+      } else {
         if (style.enabled) {
           process.stdout.write(`${compactBanner(style, version)}\n\n`);
         }
         const { report, exitCode } = check(
-          target,
-          docsTarget ?? target,
+          codeDir,
+          docsDir,
           style.enabled ? style : null,
-          { strict: rawArgs.includes('--strict') },
+          {
+            strict: rawArgs.includes('--strict'),
+            codeEndpoints,
+          },
         );
         process.stdout.write(`${report}\n`);
         process.exitCode = exitCode;
-      } catch (error) {
-        console.error(`docdrift: ${error.message}`);
-        process.exitCode = 1;
       }
+    } catch (error) {
+      console.error(`docdrift: ${error.message}`);
+      process.exitCode = 1;
     }
-  } else if (!target || !Object.hasOwn(commands, command)) {
-    console.error('usage: docdrift <scan|docs|check|fix> <dir>');
+  } else if (!Object.hasOwn(commands, command)) {
+    console.error('usage: docdrift <scan|docs|check|fix> [dir]');
     process.exitCode = 1;
   } else {
     try {
-      const endpoints = commands[command](target);
+      const endpoints = commands[command](target ?? '.');
       process.stdout.write(`${JSON.stringify(endpoints, null, 2)}\n`);
     } catch (error) {
       console.error(`docdrift: ${error.message}`);
@@ -89,7 +91,22 @@ if (rawArgs.includes('--help')) {
   }
 }
 
-async function runFix(codeDir, docsDir, isDryRun, style) {
+async function runFix(codeDir, docsTarget, isDryRun, style) {
+  const docsDir = docsTarget ?? codeDir;
+
+  let codeEndpoints;
+  try {
+    codeEndpoints = scanJava(codeDir);
+  } catch (error) {
+    console.error(`docdrift: ${error.message}`);
+    return 1;
+  }
+
+  if (codeEndpoints.length === 0) {
+    console.error(noEndpointsMessage(codeDir));
+    return 2;
+  }
+
   if (style.enabled) {
     process.stdout.write(`${compactBanner(style, version)}\n\n`);
   }
@@ -111,7 +128,6 @@ async function runFix(codeDir, docsDir, isDryRun, style) {
 
   const readmePath = join(docsDir, readmeName);
   const readmeText = readFileSync(readmePath, 'utf8');
-  const codeEndpoints = scanJava(codeDir);
   const docEndpoints = extractFromText(readmeText).map((endpoint) => ({
     ...endpoint,
     file: readmePath,
@@ -187,15 +203,21 @@ async function runFix(codeDir, docsDir, isDryRun, style) {
   }
 }
 
+function noEndpointsMessage(codeDir) {
+  const label =
+    codeDir === '.' ? basename(process.cwd()) || codeDir : codeDir;
+  return `No Spring REST endpoints found in "${label}" - run docdrift from your project root or pass the path: docdrift check <codeDir> [docsDir]`;
+}
+
 function helpText() {
   return [
-    'Usage: docdrift <command> [dir] [options]',
+    'Usage: docdrift <command> [paths] [options]',
     '',
     'Commands:',
-    '  scan <dir>                        Print code endpoints as JSON',
-    '  docs <dir>                        Print documented endpoints as JSON',
-    '  check <codeDir> [docsDir]         Compare code against docs',
-    '  fix <codeDir> [docsDir]           Draft a verified README fix',
+    '  scan [dir]                        Print code endpoints as JSON',
+    '  docs [dir]                        Print documented endpoints as JSON',
+    '  check [codeDir] [docsDir]         Compare code against docs',
+    '  fix [codeDir] [docsDir]           Draft a verified README fix',
     '',
     'Options:',
     '  --strict                          Report Spring framework endpoints as STALE',
